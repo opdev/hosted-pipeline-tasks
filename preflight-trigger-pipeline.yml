@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: preflight-trigger-pipeline
+  namespace: playground
+spec:
+  finally:
+    - name: echo-finally
+      params:
+        - name: appName
+          value: finally
+      taskRef:
+        kind: Task
+        name: echo-finally
+  tasks:
+    - name: preflight-trigger
+      params:
+        - name: appName
+          value: preflight
+      taskRef:
+        kind: Task
+        name: preflight-trigger
+    - name: preflight
+      params:
+        - name: preflight_results_exists
+          value: 'false'
+        - name: base_image
+          value: 'quay.io/opdev/preflight:0.0.0'
+        - name: package_name
+          value: package_name
+        - name: bundle_version
+          value: bundle_version
+        - name: bundle_index_image
+          value: bundle_index_image
+        - name: bundle_image
+          value: bundle_image
+        - name: service_account
+          value: default
+        - name: namespace
+          value: default
+        - name: log_level
+          value: trace
+      runAfter:
+        - preflight-trigger
+      taskRef:
+        kind: Task
+        name: preflight
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+        - name: credentials
+          workspace: kubeconfig
+        - name: output
+          workspace: kubeconfig
+  workspaces:
+    - name: kubeconfig

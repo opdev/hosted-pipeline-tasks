@@ -1,0 +1,115 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: preflight
+  namespace: playground
+spec:
+  params:
+    - default: 'false'
+      description: Skips preflight execution if set to "true"
+      name: preflight_results_exists
+      type: string
+    - default: 'quay.io/opdev/preflight:0.0.0'
+      description: Preflight image used
+      name: base_image
+      type: string
+    - description: Package name for the Operator under test
+      name: package_name
+      type: string
+    - description: Version of the bundle under test
+      name: bundle_version
+      type: string
+    - description: The Operator index image which includes the bundle
+      name: bundle_index_image
+      type: string
+    - description: The Operator bundle image under test
+      name: bundle_image
+      type: string
+    - default: default
+      description: The service account for the preflight config
+      name: service_account
+      type: string
+    - default: default
+      description: The namespace for the preflight config
+      name: namespace
+      type: string
+    - default: trace
+      description: Preflight logging level
+      name: log_level
+      type: string
+  results:
+    - description: ''
+      name: log_output_file
+    - description: ''
+      name: result_output_file
+    - description: ''
+      name: artifacts_output_dir
+  steps:
+    - env:
+        - name: KUBECONFIG
+          value: $(workspaces.kubeconfig.path)/kubeconfig
+      image: 'quay.io/redhat-isv/operator-pipelines-images:latest'
+      name: prepare-environment
+      resources: {}
+      script: |
+        #! /usr/bin/env bash
+        set -xe
+
+        if [[ "$(workspaces.credentials.bound)" == "true" ]]; then
+          # Combine the default credentials with those found in the workspace
+          # to maintain access to the internal registry.
+
+          export DOCKER_CONFIG=/tmp/.docker
+          mkdir $DOCKER_CONFIG
+          jq -s '.[0] * .[1]' \
+            $(workspaces.credentials.path)/.dockerconfigjson \
+            $HOME/.docker/config.json \
+            > $DOCKER_CONFIG/config.json
+        fi
+      workingDir: $(workspaces.output.path)
+    - env:
+        - name: PFLT_INDEXIMAGE
+          value: $(params.bundle_index_image)
+        - name: PFLT_SERVICEACCOUNT
+          value: $(params.service_account)
+        - name: PFLT_NAMESPACE
+          value: $(params.namespace)
+        - name: PFLT_LOGFILE
+          value: preflight.log
+        - name: PFLT_ARTIFACTS
+          value: artifacts
+        - name: KUBECONFIG
+          value: $(workspaces.kubeconfig.path)/kubeconfig
+        - name: PFLT_LOGLEVEL
+          value: $(params.log_level)
+      image: $(params.base_image)
+      name: check-operator
+      resources: {}
+      script: |
+        #! /usr/bin/env bash
+        set -xe
+
+        PREFLIGHT_RESULTS_EXISTS="$(params.preflight_results_exists)"
+        if [ $PREFLIGHT_RESULTS_EXISTS == "true" ]; then
+          echo "Preflight results already exists- skipping"
+          echo -n "none" | tee $(results.log_output_file.path)
+          echo -n "none" | tee $(results.result_output_file.path)
+          echo -n "none" | tee $(results.artifacts_output_dir.path)
+          exit 0
+        fi
+
+        preflight check operator $(params.bundle_image)
+
+        mv $PFLT_ARTIFACTS/results.json results.json
+        echo -n $PFLT_LOGFILE | tee $(results.log_output_file.path)
+        echo -n results.json | tee $(results.result_output_file.path)
+        echo -n $PFLT_ARTIFACTS | tee $(results.artifacts_output_dir.path)
+      workingDir: $(workspaces.output.path)
+  workspaces:
+    - description: 'Storage for preflight results, logs and artifacts.'
+      name: output
+    - description: A kubernetes config for the cluster used in preflight testing
+      name: kubeconfig
+    - description: Docker config for retrieving the bundle image
+      name: credentials
+      optional: true
