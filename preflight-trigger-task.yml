@@ -7,12 +7,37 @@ spec:
   params:
     - name: appName
       type: string
+    - name: jobName
+      type: string
+    - name: jobConfigPath
+      type: string
+    - name: prowConfigPath
+      type: string
+    - name: ocpVersion
+      type: string
+    - name: pfltLogLevel
+      type: string
+    - name: pfltIndexImage
+      type: string
+    - name: pfltArtifacts
+      type: string
+    - name: testAsset
+      type: string
+    - name: assetType
+      type: string
+    - name: outputPath
+      type: string
   steps:
-    - command:
-        - /bin/bash
-        - '-c'
-        - echo
-        - $(inputs.params.appName)
-      image: registry.redhat.io/ubi7/ubi-minimal
+    - args:
+        - -job-name $(params.jobName)
+        - -job-config-path $(params.jobConfigPath)
+        - -prow-config-path $(params.prowConfigPath)
+        - -ocp-version $(params.ocpVersion)
+        - -pflt-artifacts $(params.pfltArtifacts)
+        - -pflt-log-level $(params.pfltLogLevel)
+        - -pflt-index-image $(params.pfltIndexImage)
+        - -test-asset $(params.testAsset)
+        - -asset-type $(params.assetType)
+        - -output-path $(params.outputPath)
+      image: quay.io/opdev/preflight-trigger
       name: ''
-      resources: {}
