@@ -66,79 +66,38 @@ spec:
     - description: ''
       name: artifacts_output_dir
   steps:
+    - name: clone-for-configs
+      image: registry.access.redhat.com/ubi8/go-toolset
+      script: |
+        #!/usr/bin/env bash
+        echo "Cloning https://github.com/openshift/release"
+        git clone https://github.com/openshift/release
+      workingDir: $(workspaces.output.path)
     - args:
-        - -job-name $(params.jobName)
-        - -job-config-path $(params.jobConfigPath)
-        - -prow-config-path $(params.prowConfigPath)
-        - -ocp-version $(params.ocpVersion)
-        - -pflt-artifacts $(params.pfltArtifacts)
-        - -pflt-log-level $(params.pfltLogLevel)
-        - -pflt-index-image $(params.pfltIndexImage)
-        - -test-asset $(params.testAsset)
-        - -asset-type $(params.assetType)
-        - -output-path $(params.outputPath)
+        - '-job-name'
+        - 'periodic-ci-redhat-openshift-ecosystem-preflight-ocp-$(params.ocpVersion)-preflight-common-claim'
+        - '-job-config-path'
+        - 'release/ci-operator/jobs/redhat-openshift-ecosystem/preflight/redhat-openshift-ecosystem-preflight-ocp-$(params.ocpVersion)-periodics.yaml'
+        - '-prow-config-path'
+        - 'release/core-services/prow/02_config/_config.yaml'
+        - '-ocp-version $(params.ocpVersion)'
+        - '-pflt-artifacts'
+        - '${SHARED_DIR}'
+        - '-pflt-log-level'
+        - '$(params.pfltLogLevel)'
+        - '-pflt-index-image'
+        - '$(params.pfltIndexImage)'
+        - '-test-asset'
+        - '$(params.testAsset)'
+        - '-asset-type'
+        - '$(params.assetType)'
+        - '-output-path'
+        - '${SHARED_DIR}'
       image: quay.io/opdev/preflight-trigger
-      name: 'dptp-preflight'
-    - env:
+      name: create-prowjob
+      env:
         - name: KUBECONFIG
           value: $(workspaces.kubeconfig.path)/kubeconfig
-      image: 'quay.io/redhat-isv/operator-pipelines-images:latest'
-      name: prepare-environment
-      resources: {}
-      script: |
-        #! /usr/bin/env bash
-        set -xe
-
-        if [[ "$(workspaces.credentials.bound)" == "true" ]]; then
-          # Combine the default credentials with those found in the workspace
-          # to maintain access to the internal registry.
-
-          export DOCKER_CONFIG=/tmp/.docker
-          mkdir $DOCKER_CONFIG
-          jq -s '.[0] * .[1]' \
-            $(workspaces.credentials.path)/.dockerconfigjson \
-            $HOME/.docker/config.json \
-            > $DOCKER_CONFIG/config.json
-        fi
-      workingDir: $(workspaces.output.path)
-    - env:
-        - name: PFLT_INDEXIMAGE
-          value: $(params.bundle_index_image)
-        - name: PFLT_SERVICEACCOUNT
-          value: $(params.service_account)
-        - name: PFLT_NAMESPACE
-          value: $(params.namespace)
-        - name: PFLT_LOGFILE
-          value: preflight.log
-        - name: PFLT_ARTIFACTS
-          value: artifacts
-        - name: KUBECONFIG
-          value: $(workspaces.kubeconfig.path)/kubeconfig
-        - name: PFLT_LOGLEVEL
-          value: $(params.log_level)
-      image: $(params.base_image)
-      name: check-operator
-      resources: {}
-      script: |
-        #! /usr/bin/env bash
-        set -xe
-
-        PREFLIGHT_RESULTS_EXISTS="$(params.preflight_results_exists)"
-        if [ $PREFLIGHT_RESULTS_EXISTS == "true" ]; then
-          echo "Preflight results already exists- skipping"
-          echo -n "none" | tee $(results.log_output_file.path)
-          echo -n "none" | tee $(results.result_output_file.path)
-          echo -n "none" | tee $(results.artifacts_output_dir.path)
-          exit 0
-        fi
-
-        preflight check operator $(params.bundle_image)
-
-        mv $PFLT_ARTIFACTS/results.json results.json
-        echo -n $PFLT_LOGFILE | tee $(results.log_output_file.path)
-        echo -n results.json | tee $(results.result_output_file.path)
-        echo -n $PFLT_ARTIFACTS | tee $(results.artifacts_output_dir.path)
-      workingDir: $(workspaces.output.path)
   workspaces:
     - description: 'Storage for preflight results, logs and artifacts.'
       name: output
